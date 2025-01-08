@@ -2,7 +2,7 @@ import streamlit as st
 
 from components.main_col import main_col
 from components.side_col import side_col
-from lib.styles import init_styles
+from utils.styles import init_styles
 
 # Load secrets
 page_title = st.secrets['app']['page_title']
