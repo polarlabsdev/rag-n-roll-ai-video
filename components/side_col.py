@@ -1,30 +1,33 @@
-import time
-
 import streamlit as st
 
 COACH_RUNNING_LABEL = 'Coach is thinking...'
-COACH_COMPLETE_LABEL = 'Coach is waiting for your next question...'
-MESSAGES_PLACEHOLDER = (
-	'**Ask Coach anything you want about the video or what you learned watching it.**'
-)
+COACH_COMPLETE_LABEL = 'Coach is waiting for your next question.'
+COACH_ERROR_LABEL = 'An error occurred. Please try again.'
+MESSAGES_PLACEHOLDER = "**Ask Coach anything about what was said in the video. Keep in mind Coach can't see what you see, it just has a transcript.**"
 PROMPT_PLACEHOLDER = 'Ask Coach...'
 
 
-def get_llm_response(prompt):
-	# Sleep for 2 seconds to simulate API call
-	time.sleep(2)
-	response = f'This is where the LLM response would go for: {prompt}'
-
-	# Add assistant response to chat history
-	st.session_state.messages.append({'role': 'assistant', 'content': response})
+def get_llm_response(snowflake, prompt, chat_history):
+	response = snowflake.query_cortex(prompt, chat_history)
+	return response
 
 
-def side_col():
+def update_status(status_widget, new_status, new_state):
+	st.session_state.status = new_status
+	st.session_state.state = new_state
+	status_widget.update(label=new_status, state=new_state, expanded=False)
+
+
+def side_col(snowflake, video_details):
 	# Initialize chat history in session state if it doesn't exist
 	if 'messages' not in st.session_state:
 		st.session_state.messages = []
 
-	status = st.status(COACH_COMPLETE_LABEL, state='complete', expanded=False)
+	# Initialize status and state in session state if they don't exist
+	if 'status' not in st.session_state:
+		st.session_state.status = COACH_COMPLETE_LABEL
+	if 'state' not in st.session_state:
+		st.session_state.state = 'complete'
 
 	# Display chat history
 	# Create a container with 100% height and scrollable contents
@@ -37,18 +40,41 @@ def side_col():
 			with st.chat_message(message['role']):
 				st.markdown(message['content'])
 
+	# Display status widget
+	status_widget = st.status(st.session_state.status, state=st.session_state.state, expanded=False)
+
 	# Chat input
 	prompt = st.chat_input(PROMPT_PLACEHOLDER)
 
 	st.write('')  # Add a small amount of padding
 
 	if prompt:
-		status.update(label=COACH_RUNNING_LABEL, state='running', expanded=False)
+		update_status(status_widget, COACH_RUNNING_LABEL, 'running')
 
-		# Add user message to chat history
-		st.session_state.messages.append({'role': 'user', 'content': prompt})
+		try:
+			formatted_prompt = snowflake.generate_coach_prompt(
+				video_details['video_tags'],
+				video_details['video_transcript'],
+				st.session_state.mux_player_time,  # This comes from the main_col.py file
+				prompt,
+			)
 
-		get_llm_response(prompt)
-		status.update(label=COACH_COMPLETE_LABEL, state='complete', expanded=False)
+			response = get_llm_response(
+				snowflake,
+				formatted_prompt,
+				st.session_state.messages,
+			)
+
+			# Add user message to chat history
+			st.session_state.messages.append({'role': 'user', 'content': prompt})
+
+			# Add assistant response to chat history
+			st.session_state.messages.append({'role': 'assistant', 'content': response})
+
+			update_status(status_widget, COACH_COMPLETE_LABEL, 'complete')
+
+		except Exception as e:
+			update_status(status_widget, COACH_ERROR_LABEL, 'error')
+			raise e
 
 		st.rerun()
