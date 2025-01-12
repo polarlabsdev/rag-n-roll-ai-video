@@ -149,3 +149,6 @@ override.tf.json
 *_override.tf.json
 .terraform/
 .terraform.lock.hcl
+
+# stuff
+generated_files/

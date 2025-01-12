@@ -29,3 +29,18 @@ variable "snowflake_user_rsa_public_key" {
   type        = string
   sensitive   = true
 }
+
+variable "build_knowledge_base_command" {
+  description = "The command to build the knowledge base"
+  type        = string
+}
+
+variable "knowledge_base_file_name" {
+  description = "The name of the knowledge base file"
+  type        = string
+}
+
+variable "knowledge_base_directory_path" {
+  description = "The directory where the knowledge base file is located"
+  type        = string
+}

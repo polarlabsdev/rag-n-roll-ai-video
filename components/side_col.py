@@ -8,7 +8,7 @@ PROMPT_PLACEHOLDER = 'Ask Coach...'
 
 
 def get_llm_response(snowflake, prompt, chat_history):
-	response = snowflake.query_cortex(prompt, chat_history)
+	response = snowflake.query_cortex_chat(prompt, chat_history)
 	return response
 
 

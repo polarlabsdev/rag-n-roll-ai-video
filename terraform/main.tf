@@ -13,6 +13,12 @@ provider "snowflake" {
   user              = var.snowflake_user
   password          = var.snowflake_password
   warehouse         = var.snowflake_warehouse
+  preview_features_enabled = [
+    "snowflake_table_resource",
+    "snowflake_cortex_search_service_resource",
+    "snowflake_file_format_resource",
+    "snowflake_stage_resource"
+  ]
 }
 
 # ------------------------------
@@ -35,6 +41,15 @@ resource "snowflake_grant_account_role" "rnr_to_sysadmin" {
 resource "snowflake_warehouse" "rag_n_roll_warehouse" {
   name                = "RAG_N_ROLL"
   comment             = "Warehouse for the RAG-N-ROLL project"
+  warehouse_size      = "XSMALL"
+  auto_suspend        = 120
+  auto_resume         = true
+  initially_suspended = true
+}
+
+resource "snowflake_warehouse" "cortex_search_warehouse" {
+  name                = "CORTEX_SEARCH"
+  comment             = "Warehouse for Cortex Search"
   warehouse_size      = "XSMALL"
   auto_suspend        = 120
   auto_resume         = true
@@ -67,7 +82,7 @@ resource "snowflake_grant_account_role" "rnr_to_user" {
   ]
 }
 
-resource "snowflake_grant_privileges_to_account_role" "example" {
+resource "snowflake_grant_privileges_to_account_role" "rag_warehouse_to_role" {
   privileges        = ["USAGE"]
   account_role_name = snowflake_account_role.streamlit_role.name
 
@@ -78,6 +93,21 @@ resource "snowflake_grant_privileges_to_account_role" "example" {
 
   depends_on = [
     snowflake_warehouse.rag_n_roll_warehouse,
+    snowflake_account_role.streamlit_role
+  ]
+}
+
+resource "snowflake_grant_privileges_to_account_role" "search_warehouse_to_role" {
+  privileges        = ["USAGE"]
+  account_role_name = snowflake_account_role.streamlit_role.name
+
+  on_account_object {
+    object_type = "WAREHOUSE"
+    object_name = snowflake_warehouse.cortex_search_warehouse.name
+  }
+
+  depends_on = [
+    snowflake_warehouse.cortex_search_warehouse,
     snowflake_account_role.streamlit_role
   ]
 }
@@ -125,6 +155,186 @@ resource "snowflake_grant_ownership" "rag_n_roll_schema_ownership" {
 
   depends_on = [
     snowflake_schema.rag_n_roll_schema,
+    snowflake_account_role.streamlit_role
+  ]
+}
+
+# ------------------------------
+# CONFIGURE KNOWLEDGE BASE
+# ------------------------------
+resource "snowflake_table" "knowledge_base" {
+  database        = snowflake_database.rag_n_roll_db.name
+  schema          = snowflake_schema.rag_n_roll_schema.name
+  name            = "KNOWLEDGE_BASE"
+  change_tracking = true
+
+  column {
+    name = "SOURCE"
+    type = "VARCHAR"
+  }
+
+  column {
+    name = "SOURCE_ID"
+    type = "VARCHAR"
+  }
+
+  column {
+    name = "CHUNK_TEXT"
+    type = "VARCHAR"
+  }
+
+  column {
+    name = "TAGS"
+    type = "ARRAY"
+  }
+
+  column {
+    name = "REFERENCE_URL"
+    type = "VARCHAR"
+  }
+}
+
+resource "snowflake_file_format" "kb_csv_format" {
+  name                         = "KB_CSV_FORMAT"
+  database                     = snowflake_database.rag_n_roll_db.name
+  schema                       = snowflake_schema.rag_n_roll_schema.name
+  format_type                  = "CSV"
+  empty_field_as_null          = true
+  parse_header                 = true
+  trim_space                   = true
+  field_optionally_enclosed_by = "\""
+
+  depends_on = [
+    snowflake_database.rag_n_roll_db,
+    snowflake_schema.rag_n_roll_schema
+  ]
+}
+
+resource "snowflake_stage" "kb_csv_stage" {
+  name        = "KB_CSV_STAGE"
+  database    = snowflake_database.rag_n_roll_db.name
+  schema      = snowflake_schema.rag_n_roll_schema.name
+  file_format = "FORMAT_NAME = ${snowflake_database.rag_n_roll_db.name}.${snowflake_schema.rag_n_roll_schema.name}.${snowflake_file_format.kb_csv_format.name}"
+  directory   = "ENABLE = true"
+
+  depends_on = [
+    snowflake_file_format.kb_csv_format
+  ]
+}
+
+# This is a "null resource" that will trigger our local command scripts/populate_kb.py
+resource "terraform_data" "build_knowledge_base" {
+  triggers_replace = [
+    snowflake_stage.kb_csv_stage.name
+  ]
+
+  provisioner "local-exec" {
+    command = var.build_knowledge_base_command
+  }
+
+  depends_on = [
+    snowflake_table.knowledge_base,
+    snowflake_stage.kb_csv_stage
+  ]
+}
+
+resource "snowflake_execute" "put_csv_on_stage" {
+  execute = <<-EOT
+    PUT file://${var.knowledge_base_directory_path}/${var.knowledge_base_file_name} @${snowflake_database.rag_n_roll_db.name}.${snowflake_schema.rag_n_roll_schema.name}.${snowflake_stage.kb_csv_stage.name} AUTO_COMPRESS=TRUE;
+  EOT
+  revert  = "REMOVE @${snowflake_database.rag_n_roll_db.name}.${snowflake_schema.rag_n_roll_schema.name}.${snowflake_stage.kb_csv_stage.name}/${var.knowledge_base_file_name}.gz"
+  query   = "LIST @${snowflake_database.rag_n_roll_db.name}.${snowflake_schema.rag_n_roll_schema.name}.${snowflake_stage.kb_csv_stage.name}"
+
+  depends_on = [
+    snowflake_table.knowledge_base,
+    snowflake_file_format.kb_csv_format,
+    terraform_data.build_knowledge_base
+  ]
+}
+
+resource "snowflake_execute" "load_kb_csv" {
+  execute = <<-EOT
+    COPY INTO ${snowflake_database.rag_n_roll_db.name}.${snowflake_schema.rag_n_roll_schema.name}.${snowflake_table.knowledge_base.name}
+      FROM @${snowflake_database.rag_n_roll_db.name}.${snowflake_schema.rag_n_roll_schema.name}.${snowflake_stage.kb_csv_stage.name}/${var.knowledge_base_file_name}.gz
+      FILE_FORMAT = (FORMAT_NAME = ${snowflake_database.rag_n_roll_db.name}.${snowflake_schema.rag_n_roll_schema.name}.${snowflake_file_format.kb_csv_format.name})
+      MATCH_BY_COLUMN_NAME='CASE_INSENSITIVE';
+  EOT
+  revert  = "TRUNCATE TABLE ${snowflake_database.rag_n_roll_db.name}.${snowflake_schema.rag_n_roll_schema.name}.${snowflake_table.knowledge_base.name}"
+  query   = "SELECT * FROM ${snowflake_database.rag_n_roll_db.name}.${snowflake_schema.rag_n_roll_schema.name}.${snowflake_table.knowledge_base.name} LIMIT 5"
+
+  depends_on = [
+    snowflake_table.knowledge_base,
+    snowflake_stage.kb_csv_stage,
+    snowflake_execute.put_csv_on_stage,
+    terraform_data.build_knowledge_base
+  ]
+}
+
+resource "snowflake_cortex_search_service" "kb_search_service" {
+  database   = snowflake_database.rag_n_roll_db.name
+  schema     = snowflake_schema.rag_n_roll_schema.name
+  name       = "KB_SEARCH_SERVICE"
+  on         = "CHUNK_TEXT"
+  target_lag = "2 minutes"
+  warehouse  = snowflake_warehouse.cortex_search_warehouse.name
+  query      = "SELECT SOURCE, SOURCE_ID, CHUNK_TEXT, TAGS, REFERENCE_URL FROM \"${snowflake_database.rag_n_roll_db.name}\".\"${snowflake_schema.rag_n_roll_schema.name}\".\"${snowflake_table.knowledge_base.name}\""
+  comment    = "Search service for the knowledge base"
+
+  depends_on = [snowflake_table.knowledge_base]
+}
+
+resource "snowflake_grant_ownership" "knowledge_base_ownership" {
+  account_role_name   = snowflake_account_role.streamlit_role.name
+  outbound_privileges = "COPY"
+  on {
+    object_type = "TABLE"
+    object_name = "${snowflake_database.rag_n_roll_db.name}.${snowflake_schema.rag_n_roll_schema.name}.${snowflake_table.knowledge_base.name}"
+  }
+
+  depends_on = [
+    snowflake_table.knowledge_base,
+    snowflake_account_role.streamlit_role
+  ]
+}
+
+resource "snowflake_grant_ownership" "kb_csv_format_ownership" {
+  account_role_name   = snowflake_account_role.streamlit_role.name
+  outbound_privileges = "COPY"
+  on {
+    object_type = "FILE FORMAT"
+    object_name = "${snowflake_database.rag_n_roll_db.name}.${snowflake_schema.rag_n_roll_schema.name}.${snowflake_file_format.kb_csv_format.name}"
+  }
+
+  depends_on = [
+    snowflake_file_format.kb_csv_format,
+    snowflake_account_role.streamlit_role
+  ]
+}
+
+resource "snowflake_grant_privileges_to_account_role" "kb_csv_stage_usage" {
+  privileges        = ["READ", "WRITE"]
+  account_role_name = snowflake_account_role.streamlit_role.name
+  on_schema_object {
+    object_type = "STAGE"
+    object_name = snowflake_stage.kb_csv_stage.fully_qualified_name
+  }
+
+  depends_on = [
+    snowflake_stage.kb_csv_stage,
+    snowflake_account_role.streamlit_role
+  ]
+}
+
+resource "snowflake_grant_privileges_to_account_role" "kb_search_service_usage" {
+  privileges        = ["USAGE"]
+  account_role_name = snowflake_account_role.streamlit_role.name
+  on_schema_object {
+    object_type = "CORTEX SEARCH SERVICE"
+    object_name = snowflake_cortex_search_service.kb_search_service.fully_qualified_name
+  }
+
+  depends_on = [
+    snowflake_cortex_search_service.kb_search_service,
     snowflake_account_role.streamlit_role
   ]
 }

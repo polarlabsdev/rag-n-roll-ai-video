@@ -7,11 +7,12 @@ readme = "README.md"
 package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = ">=3.11,<3.12"
 streamlit = "^1.41.1"
-snowflake-connector-python = "^3.12.4"
 requests = "^2.32.3"
 webvtt-py = "^0.5.1"
+wikipedia = "^1.4.0"
+snowflake = "^1.0.2"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.8.6"
