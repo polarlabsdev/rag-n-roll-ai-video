@@ -40,6 +40,23 @@ def main_col():
 	# bidirectional component so we can use Streamlit.setComponentValue to send the current time
 	# from the player to a streamlit state variable. You can see it in utils/gen_simple_component.py
 	script = f"""
+		// Check for the presence of the SEEN_DISCLAIMER cookie
+		function checkDisclaimerCookie() {{
+			if (!document.cookie.split('; ').find(row => row.startsWith('SEEN_DISCLAIMER'))) {{
+				// If the cookie does not exist, show the alert
+				alertUser();
+			}}
+		}}
+
+		function alertUser() {{
+			alert("Note: You must pause the video to ask Coach questions. This is due to limitations with Streamlit adding custom HTML/JS like the video player. If you ask a question while the video is playing, nothing will happen. You won't see this warning again.");
+			// Set the SEEN_DISCLAIMER cookie
+			document.cookie = "SEEN_DISCLAIMER=true; path=/";
+		}}
+
+		// Run the check on script load
+		checkDisclaimerCookie();
+
     function onRender(event) {{
       const parentDOM = window.parent.document;
 
