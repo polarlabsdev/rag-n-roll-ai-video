@@ -14,6 +14,7 @@ from utils.system_prompts import (
 	KEYWORD_EXTRACTOR_SYSTEM_PROMPT,
 	KEYWORD_SELECTOR_SYSTEM_PROMPT,
 	KNOWLEDGE_BASE_TRANSFORM_PROMPT,
+	QUERY_ENHANCER_SYSTEM_PROMPT,
 )
 
 MODEL_NAME = 'mistral-large2'
@@ -52,6 +53,12 @@ class SnowflakeConnector:
 		)
 
 		self.root = Root(self.connection)
+
+		self.cortex_search = (
+			self.root.databases[streamlit_secrets['snowflake']['database']]
+			.schemas[streamlit_secrets['snowflake']['schema']]
+			.cortex_search_services[streamlit_secrets['snowflake']['cortex_search_name']]
+		)
 
 	# ----------------
 	# UTILS
@@ -95,6 +102,16 @@ class SnowflakeConnector:
 		cursor.close()
 		return result
 
+	def _query_cortex_search(self, prompt):
+		resp = self.cortex_search.search(
+			query=prompt,
+			columns=['CHUNK_TEXT', 'TAGS', 'REFERENCE_URL'],
+			# filter={'@eq': {'<column>': '<value>'}},
+			limit=5,
+		)
+
+		return resp.to_dict()
+
 	def _log_token_usage(self, result):
 		if LOG_TOKENS:
 			usage = result['usage']
@@ -118,29 +135,29 @@ class SnowflakeConnector:
 		video_tags,
 		video_transcript,
 		user_timestamp,
-		# external_knowledge_base,
 		user_question,
 	):
 		video_tags_str = json.dumps(video_tags)
 		video_transcript_str = json.dumps(video_transcript)
-		# external_knowledge_base_str = json.dumps(external_knowledge_base)
 
+		response = self._do_simple_cortex_query(QUERY_ENHANCER_SYSTEM_PROMPT, user_question)
+		enhanced_prompt = self._safe_return_cortex_response(response)
+		rag_response = self._query_cortex_search(enhanced_prompt)
+
+		# chr(10) == \n cause f-strings get mad about backslashes
 		coach_prompt = f"""
 		<video-tags>{video_tags_str}</video-tags>
+		<external-knowledge-base>
+		{chr(10).join([(chunk['CHUNK_TEXT']) for chunk in rag_response['results']])}
+		</external-knowledge-base>
 		<video-transcript>{video_transcript_str}</video-transcript>
 		<user-timestamp>{user_timestamp}</user-timestamp>
 		<user-question>{user_question}</user-question>
 		"""
 
-		# coach_prompt = f"""
-		# <video-tags>{video_tags_str}</video-tags>
-		# <video-transcript>{video_transcript_str}</video-transcript>
-		# <user-timestamp>{user_timestamp}</user-timestamp>
-		# <external-knowledge-base>{external_knowledge_base_str}</external-knowledge-base>
-		# <user-question>{user_question}</user-question>
-		# """
+		reference_urls = set([chunk['REFERENCE_URL'] for chunk in rag_response['results']])
 
-		return self._clean_prompt(coach_prompt)
+		return self._clean_prompt(coach_prompt), reference_urls
 
 	def query_cortex_chat(self, prompt, chat_history):
 		cursor = self.connection.cursor()

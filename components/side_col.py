@@ -4,7 +4,7 @@ COACH_RUNNING_LABEL = 'Coach is thinking...'
 COACH_COMPLETE_LABEL = 'Coach is waiting for your next question.'
 COACH_ERROR_LABEL = 'An error occurred. Please try again.'
 MESSAGES_PLACEHOLDER = "**Ask Coach anything about what was said in the video. Keep in mind Coach can't see what you see, it just has a transcript.**"
-PROMPT_PLACEHOLDER = 'Ask Coach...'
+PROMPT_PLACEHOLDER = 'Pause the video and ask Coach something...'
 
 
 def get_llm_response(snowflake, prompt, chat_history):
@@ -52,7 +52,7 @@ def side_col(snowflake, video_details):
 		update_status(status_widget, COACH_RUNNING_LABEL, 'running')
 
 		try:
-			formatted_prompt = snowflake.generate_coach_prompt(
+			formatted_prompt, reference_urls = snowflake.generate_coach_prompt(
 				video_details['video_tags'],
 				video_details['video_transcript'],
 				st.session_state.mux_player_time,  # This comes from the main_col.py file
@@ -63,6 +63,10 @@ def side_col(snowflake, video_details):
 				snowflake,
 				formatted_prompt,
 				st.session_state.messages,
+			)
+
+			response = (
+				response + '\n\n**References:**\n\n' + '\n- '.join([''] + list(reference_urls))
 			)
 
 			# Add user message to chat history
