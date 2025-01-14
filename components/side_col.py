@@ -3,13 +3,8 @@ import streamlit as st
 COACH_RUNNING_LABEL = 'Coach is thinking...'
 COACH_COMPLETE_LABEL = 'Coach is waiting for your next question.'
 COACH_ERROR_LABEL = 'An error occurred. Please try again.'
-MESSAGES_PLACEHOLDER = "**Ask Coach anything about what was said in the video. Keep in mind Coach can't see what you see, it just has a transcript.**"
+MESSAGES_PLACEHOLDER = "**Ask Coach anything about what was said in the video. Specific questions get better answers. Keep in mind Coach can't see what you see, it just has a transcript.**"
 PROMPT_PLACEHOLDER = 'Pause the video and ask Coach something...'
-
-
-def get_llm_response(snowflake, prompt, chat_history):
-	response = snowflake.query_cortex_chat(prompt, chat_history)
-	return response
 
 
 def update_status(status_widget, new_status, new_state):
@@ -57,13 +52,10 @@ def side_col(snowflake, video_details):
 				video_details['video_transcript'],
 				st.session_state.mux_player_time,  # This comes from the main_col.py file
 				prompt,
-			)
-
-			response = get_llm_response(
-				snowflake,
-				formatted_prompt,
 				st.session_state.messages,
 			)
+
+			response = response = snowflake.query_cortex_chat(formatted_prompt)
 
 			response = (
 				response + '\n\n**References:**\n\n' + '\n- '.join([''] + list(reference_urls))

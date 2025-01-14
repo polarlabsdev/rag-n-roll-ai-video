@@ -18,6 +18,7 @@ from utils.system_prompts import (
 )
 
 MODEL_NAME = 'mistral-large2'
+COACH_MODEL_NAME = 'coach_fine_tuned'
 LOG_TOKENS = False
 
 
@@ -109,8 +110,7 @@ class SnowflakeConnector:
 			# filter={'@eq': {'<column>': '<value>'}},
 			limit=5,
 		)
-
-		return resp.to_dict()
+		return resp
 
 	def _log_token_usage(self, result):
 		if LOG_TOKENS:
@@ -136,34 +136,45 @@ class SnowflakeConnector:
 		video_transcript,
 		user_timestamp,
 		user_question,
+		chat_history,
 	):
+		# We only include the user messages in the chat history because
+		# we've found that when the LLM sees images or references in the history,
+		# it tries to make up it's own. We cannot find anyway around this except
+		# to not include assistant messages in the provided chat history.
+		chat_history = [msg for msg in chat_history if msg['role'] == 'user'][-3:]
+		chart_history_str = self._generate_chat_history(chat_history)
+
 		video_tags_str = json.dumps(video_tags)
 		video_transcript_str = json.dumps(video_transcript)
-
 		response = self._do_simple_cortex_query(QUERY_ENHANCER_SYSTEM_PROMPT, user_question)
 		enhanced_prompt = self._safe_return_cortex_response(response)
 		rag_response = self._query_cortex_search(enhanced_prompt)
 
+		# print('\n' + enhanced_prompt)
+		# print(
+		# 	chr(10).join(
+		# 		[f"<excerpt>{chunk['CHUNK_TEXT']}</excerpt>" for chunk in rag_response.results]
+		# 	)
+		# )
+
 		# chr(10) == \n cause f-strings get mad about backslashes
 		coach_prompt = f"""
+		<previous-user-questions>{chart_history_str}</previous-user-questions>
 		<video-tags>{video_tags_str}</video-tags>
 		<external-knowledge-base>
-		{chr(10).join([(chunk['CHUNK_TEXT']) for chunk in rag_response['results']])}
+		{chr(10).join([f"<excerpt>{chunk['CHUNK_TEXT']}</excerpt>" for chunk in rag_response.results])}
 		</external-knowledge-base>
 		<video-transcript>{video_transcript_str}</video-transcript>
 		<user-timestamp>{user_timestamp}</user-timestamp>
 		<user-question>{user_question}</user-question>
 		"""
 
-		reference_urls = set([chunk['REFERENCE_URL'] for chunk in rag_response['results']])
-
+		reference_urls = set([chunk['REFERENCE_URL'] for chunk in rag_response.results])
 		return self._clean_prompt(coach_prompt), reference_urls
 
-	def query_cortex_chat(self, prompt, chat_history):
+	def query_cortex_chat(self, prompt):
 		cursor = self.connection.cursor()
-
-		# Limit chat history to the last 10 messages
-		chat_history = chat_history[-10:]
 
 		# Build query for LLM
 		# Getting the chat history into the prompt was all kinds of hard.
@@ -178,7 +189,6 @@ class SnowflakeConnector:
 				'{MODEL_NAME}',
 				[
 					{{ 'role': 'system', 'content': '{self._clean_prompt(COACH_SYSTEM_PROMPT)}' }},
-					{self._generate_chat_history(chat_history)}
 					{{ 'role': 'user', 'content': '{prompt}' }}
 				], 
 				{{
@@ -187,6 +197,7 @@ class SnowflakeConnector:
 			) as response;
 		"""
 
+		# print(cmd)
 		cursor.execute(cmd)
 
 		response = cursor.fetchall()[0][0]
