@@ -75,7 +75,7 @@ class SnowflakeConnector:
 
 		for message in chat_history:
 			role = message['role']
-			content = self._clean_prompt(message['content'])
+			content = message['content']
 			chat_history_str += f"{{ 'role': '{role}', 'content': '{content}' }},"
 
 		return chat_history_str
