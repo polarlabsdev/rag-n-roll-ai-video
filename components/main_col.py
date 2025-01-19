@@ -49,7 +49,7 @@ def main_col():
 		}}
 
 		function alertUser() {{
-			alert("Note: You must pause the video to ask Coach questions. This is due to limitations with Streamlit adding custom HTML/JS like the video player. If you ask a question while the video is playing, nothing will happen. You won't see this warning again.");
+			alert("Note: You must pause the video to ask Professor Prompt questions. This is due to limitations with Streamlit adding custom HTML/JS like the video player. If you ask a question while the video is playing, nothing will happen. You won't see this warning again.");
 			// Set the SEEN_DISCLAIMER cookie
 			document.cookie = "SEEN_DISCLAIMER=true; path=/";
 		}}
