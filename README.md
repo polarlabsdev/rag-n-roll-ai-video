@@ -1,8 +1,8 @@
-# 🎓 Coach - Your Interactive Video Learning Assistant
+# 🎓 Professor Prompt - Your Interactive Video Learning Assistant
 
 ## Snowflake Rag 'n' Roll Hackathon Submission
 
-Turn any educational video into an interactive learning experience with Coach, your AI teaching assistant that recreates the classroom experience by allowing you to ask questions in real-time.
+Turn any educational video into an interactive learning experience with Professor Prompt, your AI teaching assistant that recreates the classroom experience by allowing you to ask questions in real-time.
 
 ### 🛠️ Technical Stack
 
@@ -20,7 +20,7 @@ Turn any educational video into an interactive learning experience with Coach, y
 ### 🌟 Key Features
 
 - **Interactive Learning**: Pause anytime to ask questions about the content
-- **Contextual Understanding**: Coach understands where you are in the video
+- **Contextual Understanding**: Professor Prompt understands where you are in the video
 - **Knowledge Enhancement**: Automatically enriched with relevant Wikipedia knowledge
 - **Classroom Experience**: Natural dialogue with an AI teaching assistant
 - **Fully Reproducible**: Built with Terraform and idempotency in mind, this entire project can be regenerated in any account with any video
@@ -40,9 +40,9 @@ The frontend is built with Streamlit and consists of two main columns:
    - Implements cookie-based user warnings about pausing requirement
 
 2. **Side Column (Chat Interface)**
-   - Provides an interactive chat interface with Coach
+   - Provides an interactive chat interface with Professor Prompt
    - Maintains chat history in session state
-   - Displays status indicators for Coach's responses
+   - Displays status indicators for Professor Prompt's responses
    - Handles error states and loading states
    - Shows references for knowledge sources
 
@@ -58,8 +58,13 @@ When a user asks a question:
 2. Question is enhanced via Snowflake Cortex in preparation for Cortex Search
 3. Relevant knowledge is retrieved from Cortex Search
 4. Context is assembled including video tags, transcript, and external knowledge
-5. Response is generated using a fine-tuned Mistral model
+5. Response is generated using mistral-large2
 6. Answer is displayed with relevant references
+
+NOTE: We wanted to use a fine-tuned model, but ran into issues where when we fine-tuned
+      a model in Snowflake it was incredibly slow (up to 8min to answer 1 question). Though
+      the quality of the answers was greatly improved, due to the time contraints for this submission
+      we defaulted back to mistral-large2 and focused on prompt engineering.
 
 #### Snowflake Infrastructure (Terraform)
 
@@ -145,7 +150,7 @@ The LLM integration leverages multiple stages of prompt engineering and context 
 - Improves RAG retrieval by broadening the semantic search space
 
 2. **Context Assembly**
-   The full context provided to Coach includes:
+   The full context provided to Professor Prompt includes:
 
 - Video metadata (tags for topic identification)
 - External knowledge from RAG results
@@ -163,7 +168,7 @@ The LLM integration leverages multiple stages of prompt engineering and context 
 - KEYWORD_SELECTOR_SYSTEM_PROMPT: Matches knowledge base content to video topics
 - KNOWLEDGE_BASE_TRANSFORM_PROMPT: Enhances RAG content with additional context
 
-4. **Fine-Tuning**
+4. **Fine-Tuning (Not used in final submission)**
 
 - Training data generated from simulated student interactions
 - Questions crafted to match natural viewing patterns
@@ -174,9 +179,9 @@ The LLM integration leverages multiple stages of prompt engineering and context 
 - Model fine-tuned to maintain educational tone and format
 
 5. **Response Generation**
-   The final Coach response:
+   The final Professor Prompt response:
 
-- Uses fine-tuned Mistral model for consistent educational style
+- Uses system prompts and careful prompt engineering for consistent educational style
 - Maintains context through limited chat history
 - Automatically includes relevant knowledge base references
 - Formats output in markdown for readability
@@ -222,7 +227,7 @@ Your interactive video learning assistant should now be up and running.
 
 #### Fine-tuning a model
 
-**Note:** This step is optional. Coach will work out of the box with mistral-large2, but a fine-tuned model may provide more consistent and reliable responses.
+**Note:** This step is optional. Professor Prompt will work out of the box with mistral-large2, but a fine-tuned model may provide more consistent and reliable responses.
 
 Due to time constraints during development, our fine-tuning notebook isn't as polished or reusable as our other components. However, you can use it as a starting point:
 

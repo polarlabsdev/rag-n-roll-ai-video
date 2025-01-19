@@ -1,10 +1,10 @@
 import streamlit as st
 
-COACH_RUNNING_LABEL = 'Coach is thinking...'
-COACH_COMPLETE_LABEL = 'Coach is waiting for your next question.'
+COACH_RUNNING_LABEL = 'The professor is thinking...'
+COACH_COMPLETE_LABEL = 'Professor Prompt is waiting for your next question.'
 COACH_ERROR_LABEL = 'An error occurred. Please try again.'
-MESSAGES_PLACEHOLDER = "**Ask Coach anything about what was said in the video. Specific questions get better answers. Keep in mind Coach can't see what you see, it just has a transcript.**"
-PROMPT_PLACEHOLDER = 'Pause the video and ask Coach something...'
+MESSAGES_PLACEHOLDER = "**Ask Professor Prompt anything about what was said in the video. Specific questions get better answers. Keep in mind the professor can't see what you see, it just has a transcript.**"
+PROMPT_PLACEHOLDER = 'Pause the video and ask Professor Prompt something...'
 
 
 def update_status(status_widget, new_status, new_state):

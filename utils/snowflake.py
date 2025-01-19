@@ -51,6 +51,7 @@ class SnowflakeConnector:
 			warehouse=streamlit_secrets['snowflake']['warehouse'],
 			database=streamlit_secrets['snowflake']['database'],
 			schema=streamlit_secrets['snowflake']['schema'],
+			client_session_keep_alive=True,
 		)
 
 		self.root = Root(self.connection)
