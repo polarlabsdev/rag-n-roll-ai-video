@@ -17,7 +17,7 @@ from utils.system_prompts import (
 	QUERY_ENHANCER_SYSTEM_PROMPT,
 )
 
-MODEL_NAME = 'mistral-large2'
+MODEL_NAME = 'claude-3-5-sonnet'
 COACH_MODEL_NAME = 'coach_fine_tuned'
 LOG_TOKENS = False
 
